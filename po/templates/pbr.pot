@@ -210,8 +210,16 @@ msgstr ""
 msgid "Grant UCI and file access for luci-app-pbr"
 msgstr ""
 
+#: applications/luci-app-pbr/htdocs/luci-static/resources/view/pbr/overview.js:373
+msgid "IPv4 gateway override"
+msgstr ""
+
 #: applications/luci-app-pbr/htdocs/luci-static/resources/view/pbr/overview.js:119
 msgid "IPv6 Support"
+msgstr ""
+
+#: applications/luci-app-pbr/htdocs/luci-static/resources/view/pbr/overview.js:381
+msgid "IPv6 gateway override"
 msgstr ""
 
 #: applications/luci-app-pbr/htdocs/luci-static/resources/view/pbr/overview.js:144
@@ -399,6 +407,10 @@ msgstr ""
 msgid "Policy '%s' has an unknown interface"
 msgstr ""
 
+#: applications/luci-app-pbr/htdocs/luci-static/resources/pbr/status.js:423
+msgid "Policy '%s' has an invalid gateway override"
+msgstr ""
+
 #: applications/luci-app-pbr/htdocs/luci-static/resources/pbr/status.js:416
 msgid "Policy '%s' has no assigned DNS"
 msgstr ""
@@ -414,6 +426,10 @@ msgstr ""
 #: applications/luci-app-pbr/htdocs/luci-static/resources/pbr/status.js:465
 msgid ""
 "Policy '%s' refers to URL which can't be downloaded in 'secure_reload' mode"
+msgstr ""
+
+#: applications/luci-app-pbr/htdocs/luci-static/resources/pbr/status.js:426
+msgid "Policy '%s' uses gateway override with an unsupported routing-table mode"
 msgstr ""
 
 #: applications/luci-app-pbr/htdocs/luci-static/resources/view/status/include/72_pbr.js:11
@@ -498,7 +514,7 @@ msgstr ""
 msgid "Rule Create option"
 msgstr ""
 
-#: applications/luci-app-pbr/htdocs/luci-static/resources/view/pbr/overview.js:432
+#: applications/luci-app-pbr/htdocs/luci-static/resources/view/pbr/overview.js:446
 msgid ""
 "Run the following user files after setting up but before restarting DNSMASQ. "
 "See the %sREADME%s for details."
@@ -520,6 +536,10 @@ msgstr ""
 
 #: applications/luci-app-pbr/htdocs/luci-static/resources/view/pbr/overview.js:162
 msgid "Select Add for -A/add and Insert for -I/Insert."
+msgstr ""
+
+#: applications/luci-app-pbr/htdocs/luci-static/resources/view/pbr/overview.js:368
+msgid "via %s"
 msgstr ""
 
 #: applications/luci-app-pbr/htdocs/luci-static/resources/pbr/status.js:660

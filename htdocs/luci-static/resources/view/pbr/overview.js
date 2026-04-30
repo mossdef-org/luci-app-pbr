@@ -355,6 +355,36 @@ return view.extend({
 		});
 		o.datatype = "network";
 		o.rmempty = false;
+		o.textvalue = function (section_id) {
+			var iface = this.cfgvalue(section_id),
+				gateways = [
+					L.uci.get(pkg.Name, section_id, "gateway"),
+					L.uci.get(pkg.Name, section_id, "gateway6"),
+				].filter(function (gateway) {
+					return gateway != null && gateway !== "";
+				});
+
+			if (gateways.length)
+				return "%s (%s)".format(iface, _("via %s").format(gateways.join(", ")));
+
+			return iface;
+		};
+
+		o = s.option(form.Value, "gateway", _("IPv4 gateway override"));
+		o.datatype = "ip4addr";
+		o.placeholder = "10.0.0.1";
+		o.rmempty = true;
+		o.default = "";
+		o.modalonly = true;
+
+		if (L.uci.get(pkg.Name, "config", "ipv6_enabled") === "1") {
+			o = s.option(form.Value, "gateway6", _("IPv6 gateway override"));
+			o.datatype = "ip6addr";
+			o.placeholder = "2001:db8::1";
+			o.rmempty = true;
+			o.default = "";
+			o.modalonly = true;
+		}
 
 		s = m.section(
 			form.GridSection,

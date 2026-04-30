@@ -420,6 +420,12 @@ var status = baseclass.extend({
 					errorPolicyUnknownInterface: _(
 						"Policy '%s' has an unknown interface",
 					),
+					errorPolicyGatewayInvalid: _(
+						"Policy '%s' has an invalid gateway override",
+					),
+					errorPolicyGatewayUnsupportedMode: _(
+						"Policy '%s' uses gateway override with an unsupported routing-table mode",
+					),
 					errorPolicyProcessCMD: _("%s"),
 					errorFailedSetup: _("Failed to set up '%s'"),
 					errorFailedReload: _("Failed to reload '%s'"),
