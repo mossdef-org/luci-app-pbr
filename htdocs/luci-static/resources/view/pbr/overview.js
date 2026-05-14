@@ -230,6 +230,20 @@ return view.extend({
 		o.datatype = "uinteger";
 		o.default = "30000";
 
+		o = s.taboption(
+			"tab_advanced",
+			form.Flag,
+			"nft_soft_reload",
+			_("Soft nftables table reload"),
+			_(
+				"When enabled, the service will flush and reload only the PBR-managed nftables entries " +
+					"instead of performing a full table teardown and rebuild. " +
+					"This reduces disruption to active connections during policy reload."
+			)
+		);
+		o.rmempty = false;
+		o.default = "0";
+
 		s = m.section(
 			form.GridSection,
 			"policy",
