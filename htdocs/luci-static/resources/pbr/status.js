@@ -57,9 +57,9 @@ var pkg = {
 			const parts = [iface];
 			if (dev_ipv4 && dev_ipv4 !== iface) parts.push(dev_ipv4);
 			if (gw_ipv4) parts.push(gw_ipv4);
-			if (ipv6Enabled) {
-				if (gw_ipv6 && dev_ipv6 && dev_ipv6 !== iface) parts.push(dev_ipv6);
-				parts.push(gw_ipv6 || "::0");
+			if (ipv6Enabled && gw_ipv6) {
+				if (dev_ipv6 && dev_ipv6 !== iface) parts.push(dev_ipv6);
+				parts.push(gw_ipv6);
 			}
 			let line = parts.join("/");
 			if (default_gw) line += " ✓";
