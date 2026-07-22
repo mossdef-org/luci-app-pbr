@@ -11,7 +11,7 @@ var pkg = {
 		return "pbr";
 	},
 	get LuciCompat() {
-		return 33;
+		return 34;
 	},
 	get ReadmeCompat() {
 		return "1.2.3";
@@ -356,6 +356,12 @@ var status = baseclass.extend({
 						'<a href="' + pkg.URL + '#routing-tables-modes" target="_blank">',
 						"</a>",
 					),
+					warningInterfaceRoutingUnknownGateway4: _(
+						"Unknown IPv4 gateway for '%s'",
+					),
+					warningInterfaceRoutingUnknownGateway6: _(
+						"Unknown IPv6 gateway for '%s'",
+					),
 				};
 				var warningsTitle = E(
 					"label",
@@ -500,9 +506,6 @@ var status = baseclass.extend({
 					errorRequiredBinaryMissing: _("Required binary '%s' is missing"),
 					errorInterfaceRoutingUnknownDevType: _(
 						"Unknown IPv6 Link type for device '%s'",
-					),
-					errorInterfaceRoutingUnknownGateway: _(
-						"Unknown Gateway for device '%s'",
 					),
 					errorMktempFileCreate: _(
 						"Failed to create temporary file with mktemp mask: '%s'",
