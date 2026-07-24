@@ -184,6 +184,45 @@ return view.extend({
 		o = s.taboption(
 			"tab_advanced",
 			form.Value,
+			"uplink_interface",
+			_("Default Uplink Interface (IPv4)"),
+			_("Force the default IPv4 uplink interface used by the service. " +
+				"Select from the list of known interfaces or enter a custom interface name.")
+		);
+		if (Array.isArray(reply.interfaces)) {
+			reply.interfaces.forEach((element) => {
+				if (element.toLowerCase() !== "ignore") {
+					o.value(element, reply.interface_labels[element] || element);
+				}
+			});
+		}
+		o.datatype = "network";
+		o.default = "wan";
+		o.rmempty = true;
+
+		o = s.taboption(
+			"tab_advanced",
+			form.Value,
+			"uplink_interface6",
+			_("Default Uplink Interface (IPv6)"),
+			_("Force the default IPv6 uplink interface used by the service. " +
+				"Select from the list of known interfaces or enter a custom interface name.")
+		);
+		if (Array.isArray(reply.interfaces)) {
+			reply.interfaces.forEach((element) => {
+				if (element.toLowerCase() !== "ignore") {
+					o.value(element, reply.interface_labels[element] || element);
+				}
+			});
+		}
+		o.datatype = "network";
+		o.default = "wan6";
+		o.rmempty = true;
+		o.depends("ipv6_enabled", "1");
+
+		o = s.taboption(
+			"tab_advanced",
+			form.Value,
 			"uplink_mark",
 			_("Uplink Interface Table FW Mark"),
 			_(
