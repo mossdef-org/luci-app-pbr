@@ -10,6 +10,78 @@
 
 var pkg = pbr.pkg;
 
+// ── Policy group UI constants ────────────────────────────────────────
+
+var GROUP_PALETTE = [
+	"#2d5986", "#1a6644", "#7a3a1a", "#5a2d86", "#1a5a6a", "#863d2d",
+];
+
+var GROUP_CSS = [
+	".pbr-group-hdr { position:relative; }",
+	".pbr-group-hdr td {",
+	"  cursor:pointer; user-select:none;",
+	"  padding:5px 12px !important;",
+	"  border-top:3px solid rgba(0,0,0,.22) !important;",
+	"  line-height:1.8;",
+	"}",
+	".pbr-group-hdr td:hover { filter:brightness(1.12); }",
+	".pbr-toggle { display:inline-block; width:1.2em; text-align:center; }",
+	".pbr-count  { opacity:.72; font-size:.88em; font-weight:400; margin-left:.4em; }",
+	".pbr-hdr-right { float:right; display:flex; gap:5px; }",
+	".pbr-hdr-btn {",
+	"  cursor:pointer;",
+	"  background:rgba(255,255,255,.22); border:1px solid rgba(255,255,255,.32);",
+	"  color:#fff; padding:1px 9px; border-radius:3px; font-size:.82em; line-height:1.7;",
+	"  white-space:nowrap;",
+	"}",
+	".pbr-hdr-btn:hover { background:rgba(255,255,255,.4); }",
+	".pbr-add-group-bar {",
+	"  display:flex; align-items:center; gap:7px; padding:6px 0 8px; flex-wrap:wrap;",
+	"}",
+	".pbr-add-group-bar span { font-size:.9em; opacity:.8; }",
+	".pbr-add-group-bar input {",
+	"  padding:3px 8px; border:1px solid #bbb; border-radius:3px;",
+	"  width:155px; font-size:.9em;",
+	"}",
+	".pbr-add-group-bar button {",
+	"  padding:3px 12px; border-radius:3px; cursor:pointer;",
+	"  background:#2d5986; color:#fff; border:none; font-size:.9em;",
+	"}",
+	".pbr-add-group-bar button:hover { background:#3a6fa8; }",
+	".pbr-clone-btn:hover { filter:brightness(.85); }",
+].join("\n");
+
+// Duplicate a policy rule: copies all UCI fields, appends -copy to name.
+function cloneRule(sid) {
+	const src = L.uci.get(pkg.Name, sid);
+	if (!src) return;
+	const newSid = L.uci.add(pkg.Name, "policy");
+	Object.keys(src).forEach((k) => {
+		if (k.charAt(0) !== ".") L.uci.set(pkg.Name, newSid, k, src[k]);
+	});
+	const origName = src.name || "";
+	L.uci.set(pkg.Name, newSid, "name", origName ? origName + "-copy" : "copy");
+	L.uci.save().then(() => window.location.reload());
+}
+
+// Click the section's built-in Add button, then pre-fill the group field.
+function triggerAddRule(groupLabel, formNode) {
+	const addBtn =
+		formNode.querySelector(".cbi-section-create [type=submit]") ||
+		formNode.querySelector(".cbi-section-create button");
+	if (!addBtn) return;
+	addBtn.click();
+	setTimeout(() => {
+		const inputs = formNode.querySelectorAll("input[id$=\".group\"]");
+		if (!inputs.length) return;
+		const inp = inputs[inputs.length - 1];
+		inp.value = groupLabel;
+		inp.dispatchEvent(new Event("input",  { bubbles: true }));
+		inp.dispatchEvent(new Event("change", { bubbles: true }));
+		inp.closest("tr").scrollIntoView({ behavior: "smooth", block: "nearest" });
+	}, 80);
+}
+
 return view.extend({
 	load: function () {
 		return Promise.all([
@@ -230,6 +302,8 @@ return view.extend({
 		o.datatype = "uinteger";
 		o.default = "30000";
 
+		// ── Policies ─────────────────────────────────────────────────────────
+
 		s = m.section(
 			form.GridSection,
 			"policy",
@@ -248,11 +322,33 @@ return view.extend({
 		s.anonymous = true;
 		s.addremove = true;
 
+		// Sort rows: grouped rules first (preserving group order), ungrouped last.
+		var sortedPolicySids = [];
+		const _origCfg = s.cfgsections.bind(s);
+		s.cfgsections = function () {
+			const sids = _origCfg();
+			const order = [], buckets = {}, seen = {};
+			sids.forEach((sid) => {
+				const g = (L.uci.get(pkg.Name, sid, "group") || "").trim();
+				const k = g || "\xff";
+				if (!seen[k]) { seen[k] = true; if (g) order.push(k); }
+				(buckets[k] = buckets[k] || []).push(sid);
+			});
+			sortedPolicySids = order
+				.reduce((a, k) => a.concat(buckets[k]), [])
+				.concat(buckets["\xff"] || []);
+			return sortedPolicySids;
+		};
+
 		o = s.option(form.Flag, "enabled", _("Enabled"));
 		o.default = "1";
 		o.editable = true;
 
 		o = s.option(form.Value, "name", _("Name"));
+
+		o = s.option(form.Value, "group", _("Group"));
+		o.rmempty = true;
+		o.editable = true;
 
 		o = s.option(form.Value, "src_addr", _("Local addresses / devices"));
 		o.datatype =
@@ -357,6 +453,8 @@ return view.extend({
 		o.datatype = "network";
 		o.rmempty = false;
 
+		// ── DNS Policies ──────────────────────────────────────────────────────
+
 		s = m.section(
 			form.GridSection,
 			"dns_policy",
@@ -402,6 +500,8 @@ return view.extend({
 		o.datatype = "port";
 		o.default = "53";
 
+		// ── DSCP Tagging ──────────────────────────────────────────────────────
+
 		s = m.section(
 			form.NamedSection,
 			"config",
@@ -424,6 +524,8 @@ return view.extend({
 				o.datatype = "and(uinteger, min(1), max(63))";
 			}
 		});
+
+		// ── Custom User File Includes ─────────────────────────────────────────
 
 		s = m.section(
 			form.GridSection,
@@ -451,6 +553,168 @@ return view.extend({
 		o.editable = true;
 		o.rmempty = false;
 
-		return Promise.all([status.render(), m.render()]);
+		// ── Post-render: inject collapsible group headers & Clone buttons ─────
+
+		return Promise.all([status.render(), m.render()]).then((nodes) => {
+			const formNode = nodes[1];
+
+			// Inject CSS
+			const styleEl = document.createElement("style");
+			styleEl.textContent = GROUP_CSS;
+			document.head.appendChild(styleEl);
+
+			// localStorage persists which groups are EXPANDED (default = collapsed)
+			const LS_KEY = "pbr-expanded-groups";
+			let expandedSet = new Set();
+			try { expandedSet = new Set(JSON.parse(localStorage.getItem(LS_KEY) || "[]")); } catch (e) { /* ignore */ }
+			const saveLS = () => {
+				try { localStorage.setItem(LS_KEY, JSON.stringify([...expandedSet])); } catch (e) { /* ignore */ }
+			};
+
+			// Policy table rows
+			const policyTable = formNode.querySelector("table");
+			if (!policyTable) return nodes;
+			const tbody = policyTable.querySelector("tbody") || policyTable;
+
+			const dataRows = Array.from(tbody.children).filter((r) =>
+				r.tagName === "TR" && !r.querySelector("th") && !r.querySelector(".cbi-section-create")
+			);
+
+			// Build group metadata and inject Clone buttons
+			const groupMeta = {};
+			let colorIdx = 0;
+
+			dataRows.forEach((row, i) => {
+				const sid = sortedPolicySids[i];
+				if (!sid) return;
+				const sec = L.uci.get(pkg.Name, sid);
+				const g   = ((sec && sec.group) || "").trim();
+				const lbl = g || "—";
+
+				if (!groupMeta[lbl]) {
+					groupMeta[lbl] = {
+						color: g ? GROUP_PALETTE[colorIdx++ % GROUP_PALETTE.length] : "#555",
+						rows: [],
+					};
+				}
+				groupMeta[lbl].rows.push(row);
+				row.dataset.pbrGroup = lbl;
+				row.style.borderLeft = "3px solid " + groupMeta[lbl].color;
+
+				// Clone button: insert inside action <div>, after ☰ drag handle, before Edit
+				const actionCell = row.querySelector("td:last-child");
+				if (actionCell && sid) {
+					const cloneBtn = document.createElement("button");
+					cloneBtn.className = "pbr-clone-btn";
+					cloneBtn.textContent = _("Clone");
+					cloneBtn.title = _("Duplicate this rule");
+					cloneBtn.style.cssText =
+						"display:inline-block;padding:3px 10px;margin:0 2px;cursor:pointer;" +
+						"font-size:.9em;border-radius:3px;border:1px solid #5a6268;" +
+						"background:#6c757d;color:#fff;vertical-align:middle;white-space:nowrap;line-height:1.5;";
+					cloneBtn.addEventListener("click", (e) => {
+						e.stopPropagation();
+						cloneRule(sid);
+					});
+					const actionsDiv = actionCell.querySelector("div");
+					if (actionsDiv) {
+						actionsDiv.insertBefore(cloneBtn, actionsDiv.querySelector(".cbi-button-edit") || null);
+					} else {
+						actionCell.insertBefore(cloneBtn, actionCell.querySelector(".cbi-button-edit") || actionCell.firstChild);
+					}
+				}
+			});
+
+			// Inject one collapsible header <tr> before each group's first row
+			const seen = {};
+			dataRows.forEach((row) => {
+				const lbl = row.dataset.pbrGroup;
+				if (!lbl || seen[lbl]) return;
+				seen[lbl] = true;
+
+				const color = groupMeta[lbl].color;
+				let isOpen = expandedSet.has(lbl);
+
+				const hdr  = document.createElement("tr");
+				hdr.draggable = false;
+				hdr.className = "pbr-group-hdr";
+
+				const cell = document.createElement("td");
+				cell.colSpan = 99;
+				cell.style.cssText =
+					"background:" + color + ";color:#fff;font-weight:600;" +
+					"font-size:.82em;letter-spacing:.09em";
+				hdr.appendChild(cell);
+				tbody.insertBefore(hdr, row);
+
+				const redraw = () => {
+					const rows  = groupMeta[lbl].rows;
+					const count = rows.length;
+					const title = lbl === "—" ? _("Ungrouped") : lbl;
+					cell.innerHTML =
+						'<span class="pbr-toggle">' + (isOpen ? "▼" : "▶") + "</span> " +
+						"<strong>" + title + "</strong>" +
+						'<span class="pbr-count">(' + count + (count === 1 ? " " + _("rule") : " " + _("rules")) + ")</span>" +
+						'<span class="pbr-hdr-right">' +
+						(lbl !== "—"
+							? '<button class="pbr-hdr-btn pbr-btn-add" title="' + _("Add rule to this group") + '">+ ' + _("rule") + "</button>"
+							: "") +
+						"</span>";
+
+					rows.forEach((r) => { r.style.display = isOpen ? "" : "none"; });
+
+					const addBtn = cell.querySelector(".pbr-btn-add");
+					if (addBtn) {
+						addBtn.addEventListener("click", (e) => {
+							e.stopPropagation();
+							triggerAddRule(lbl, formNode);
+						});
+					}
+				};
+
+				cell.addEventListener("click", () => {
+					isOpen = !isOpen;
+					if (isOpen) expandedSet.add(lbl); else expandedSet.delete(lbl);
+					saveLS();
+					redraw();
+				});
+
+				redraw();
+			});
+
+			// "Add group" bar — positioned after the policy section description
+			const bar = document.createElement("div");
+			bar.className = "pbr-add-group-bar";
+			bar.innerHTML =
+				"<span>" + _("New group:") + "</span>" +
+				'<input id="pbr-grp-in" type="text" placeholder="' + _("Group name…") + '" autocomplete="off">' +
+				'<button id="pbr-grp-ok">+ ' + _("Create") + "</button>";
+
+			const anchor =
+				formNode.querySelector("#cbi-pbr-policy .cbi-section-descr") ||
+				(policyTable.closest(".cbi-section") || policyTable.parentNode)
+					.querySelector(".cbi-section-descr");
+
+			if (anchor) {
+				anchor.insertAdjacentElement("afterend", bar);
+			} else {
+				(policyTable.closest(".cbi-section") || policyTable.parentNode).prepend(bar);
+			}
+
+			bar.querySelector("#pbr-grp-ok").addEventListener("click", () => {
+				const name = (bar.querySelector("#pbr-grp-in").value || "").trim();
+				if (!name) return;
+				const newSid = L.uci.add(pkg.Name, "policy");
+				L.uci.set(pkg.Name, newSid, "group",   name);
+				L.uci.set(pkg.Name, newSid, "enabled", "1");
+				L.uci.save().then(() => window.location.reload());
+			});
+
+			bar.querySelector("#pbr-grp-in").addEventListener("keydown", (e) => {
+				if (e.key === "Enter") bar.querySelector("#pbr-grp-ok").click();
+			});
+
+			return nodes;
+		});
 	},
 });
