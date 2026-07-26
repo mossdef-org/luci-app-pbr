@@ -64,6 +64,20 @@ function cloneRule(sid) {
 	L.uci.save().then(() => window.location.reload());
 }
 
+// Remove group label from all rules → they fall into Ungrouped.
+function dissolveGroup(groupLabel, sids) {
+	if (!window.confirm(_("Remove group \"%s\" and move its %d rule(s) to Ungrouped?").format(groupLabel, sids.length))) return;
+	sids.forEach((sid) => L.uci.set(pkg.Name, sid, "group", ""));
+	L.uci.save().then(() => window.location.reload());
+}
+
+// Delete all rules in a group.
+function deleteGroup(groupLabel, sids) {
+	if (!window.confirm(_("Delete group \"%s\" and ALL %d rule(s) inside it? This cannot be undone.").format(groupLabel, sids.length))) return;
+	sids.forEach((sid) => L.uci.remove(pkg.Name, sid));
+	L.uci.save().then(() => window.location.reload());
+}
+
 // Click the section's built-in Add button, then pre-fill the group field.
 function triggerAddRule(groupLabel, formNode) {
 	const addBtn =
@@ -595,9 +609,11 @@ return view.extend({
 					groupMeta[lbl] = {
 						color: g ? GROUP_PALETTE[colorIdx++ % GROUP_PALETTE.length] : "#555",
 						rows: [],
+						sids: [],
 					};
 				}
 				groupMeta[lbl].rows.push(row);
+				groupMeta[lbl].sids.push(sid);
 				row.dataset.pbrGroup = lbl;
 				row.style.borderLeft = "3px solid " + groupMeta[lbl].color;
 
@@ -659,6 +675,12 @@ return view.extend({
 						(lbl !== "—"
 							? '<button class="pbr-hdr-btn pbr-btn-add" title="' + _("Add rule to this group") + '">+ ' + _("rule") + "</button>"
 							: "") +
+						(lbl !== "—"
+							? '<button class="pbr-hdr-btn pbr-btn-ungroup" title="' + _("Remove group label, keep rules") + '">⟲ ' + _("ungroup") + "</button>"
+							: "") +
+						(lbl !== "—"
+							? '<button class="pbr-hdr-btn pbr-btn-delgrp" title="' + _("Delete group and all its rules") + '" style="background:rgba(180,30,30,.55);border-color:rgba(255,80,80,.4)">✕ ' + _("delete all") + "</button>"
+							: "") +
 						"</span>";
 
 					rows.forEach((r) => { r.style.display = isOpen ? "" : "none"; });
@@ -668,6 +690,22 @@ return view.extend({
 						addBtn.addEventListener("click", (e) => {
 							e.stopPropagation();
 							triggerAddRule(lbl, formNode);
+						});
+					}
+
+					const ungroupBtn = cell.querySelector(".pbr-btn-ungroup");
+					if (ungroupBtn) {
+						ungroupBtn.addEventListener("click", (e) => {
+							e.stopPropagation();
+							dissolveGroup(lbl, groupMeta[lbl].sids);
+						});
+					}
+
+					const delGrpBtn = cell.querySelector(".pbr-btn-delgrp");
+					if (delGrpBtn) {
+						delGrpBtn.addEventListener("click", (e) => {
+							e.stopPropagation();
+							deleteGroup(lbl, groupMeta[lbl].sids);
 						});
 					}
 				};
