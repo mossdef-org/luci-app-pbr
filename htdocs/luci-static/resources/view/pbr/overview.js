@@ -199,6 +199,7 @@ return view.extend({
 		o.datatype = "network";
 		o.default = "wan";
 		o.rmempty = true;
+		o.forcewrite = true;
 
 		o = s.taboption(
 			"tab_advanced",
@@ -218,6 +219,7 @@ return view.extend({
 		o.datatype = "network";
 		o.default = "wan6";
 		o.rmempty = true;
+		o.forcewrite = true;
 		o.depends("ipv6_enabled", "1");
 
 		o = s.taboption(
