@@ -268,7 +268,7 @@ return view.extend({
 		);
 		o.rmempty = true;
 		o.placeholder = "30000";
-		o.datatype = "uinteger";
+		o.datatype = "range(99,32765)";
 		o.default = "30000";
 
 		s = m.section(
