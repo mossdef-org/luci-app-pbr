@@ -5,6 +5,7 @@
 "require form";
 "require rpc";
 "require view";
+"require dom";
 "require pbr.status as pbr";
 /* global pbr */
 
@@ -492,6 +493,71 @@ return view.extend({
 		o.editable = true;
 		o.rmempty = false;
 
-		return Promise.all([status.render(), m.render()]);
+		return Promise.all([status.render(), m.render()]).then(function (nodes) {
+			var statusNode = nodes[0];
+
+			// Saving settings fires pbr's procd config.change trigger, which
+			// reloads the service asynchronously. LuCI reloads the page once the
+			// apply completes, so getInitStatus() often lands mid-reload and
+			// reports the service as stopped -- and nothing ever re-checked it,
+			// leaving a stale "Stopped" until the user refreshed by hand.
+			//
+			// Re-check only while the status looks like that transient state
+			// (enabled but not running), and stop as soon as it settles. A
+			// normally-running service therefore costs no extra RPC calls:
+			// getInitStatus() is expensive on the router, since every call
+			// re-runs full platform detection and dumps the nft table.
+			//
+			// This deliberately uses setTimeout rather than LuCI's poll module
+			// (same approach as pollServiceStatus() in pbr/status.js): a
+			// registered poll drives LuCI's global auto-refresh indicator, which
+			// would sit at "Paused" once we unregistered, as if the page had
+			// stalled.
+			if (statusData.enabled && !statusData.running) {
+				var attempts = 0;
+				var maxAttempts = 22; // give up after ~90s
+
+				// Check quickly at first, since a reload normally completes
+				// within a few seconds, then ease off so that a slow restart
+				// doesn't hammer an RPC this expensive -- and doesn't compete
+				// for CPU with the very reload we're waiting on.
+				var delayFor = function (done) {
+					if (done < 4) return 1500;
+					if (done < 8) return 3000;
+					return 5000;
+				};
+
+				// Re-render only once the state settles, so the service control
+				// buttons inside the status box aren't torn out from under the
+				// user on every tick.
+				var refreshStatus = function () {
+					return status.render().then(function (freshNode) {
+						dom.content(
+							statusNode,
+							Array.prototype.slice.call(freshNode.childNodes)
+						);
+					});
+				};
+
+				var checkStatus = function () {
+					attempts++;
+					L.resolveDefault(pbr.getInitStatus(pkg.Name), {})
+						.then(function (res) {
+							var reply = (res && res[pkg.Name]) || {};
+							if (reply.running || !reply.enabled || attempts >= maxAttempts)
+								return refreshStatus();
+							setTimeout(checkStatus, delayFor(attempts));
+						})
+						.catch(function () {
+							if (attempts < maxAttempts)
+								setTimeout(checkStatus, delayFor(attempts));
+						});
+				};
+
+				setTimeout(checkStatus, delayFor(0));
+			}
+
+			return nodes;
+		});
 	},
 });
