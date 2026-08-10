@@ -112,6 +112,15 @@ return view.extend({
 		if (reply.platform.dnsmasq_nftset_support) {
 			o.value("dnsmasq.nftset", _("Dnsmasq nft set"));
 			o.default = "dnsmasq.nftset";
+		} else if (
+			L.uci.get(pkg.Name, "config", "resolver_set") === "dnsmasq.nftset"
+		) {
+			// Support detection can fail transiently, for instance when dnsmasq
+			// is not installed or not yet running. Without the stored value in
+			// the choice list the select falls back to its first entry and
+			// saving would silently rewrite resolver_set to "none". The
+			// description above already states that support is missing.
+			o.value("dnsmasq.nftset", _("Dnsmasq nft set"));
 		}
 		o.rmempty = false;
 
