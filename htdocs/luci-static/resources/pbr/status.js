@@ -11,7 +11,7 @@ var pkg = {
 		return "pbr";
 	},
 	get LuciCompat() {
-		return 34;
+		return 35;
 	},
 	get ReadmeCompat() {
 		return "1.2.3";
@@ -478,6 +478,9 @@ var status = baseclass.extend({
 					),
 					errorInterfaceMarkOverflow: _(
 						"Interface mark for '%s' exceeds the fwmask value",
+					),
+					errorInterfacePriorityExhausted: _(
+						"No IP rule priority left to allocate for '%s'",
 					),
 					errorFailedToResolve: _("Failed to resolve '%s'"),
 					errorInvalidOVPNConfig: _(

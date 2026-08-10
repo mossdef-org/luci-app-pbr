@@ -17,7 +17,7 @@ import { access } from 'fs';
 import { cursor } from 'uci';
 
 const packageName = 'pbr'; // ucode-lsp disable
-const rpcdCompat = 34; // ucode-lsp disable
+const rpcdCompat = 35; // ucode-lsp disable
 
 // ── rpcd Method Handlers ────────────────────────────────────────────
 
