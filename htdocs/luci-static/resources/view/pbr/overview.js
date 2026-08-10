@@ -108,10 +108,12 @@ return view.extend({
 			text
 		);
 		o.value("none", _("Disabled"));
+		o.default = "none";
 		if (reply.platform.dnsmasq_nftset_support) {
 			o.value("dnsmasq.nftset", _("Dnsmasq nft set"));
 			o.default = "dnsmasq.nftset";
 		}
+		o.rmempty = false;
 
 		o = s.taboption(
 			"tab_basic",
@@ -198,8 +200,7 @@ return view.extend({
 		}
 		o.datatype = "network";
 		o.default = "wan";
-		o.rmempty = true;
-		o.forcewrite = true;
+		o.rmempty = false;
 
 		o = s.taboption(
 			"tab_advanced",
@@ -218,8 +219,7 @@ return view.extend({
 		}
 		o.datatype = "network";
 		o.default = "wan6";
-		o.rmempty = true;
-		o.forcewrite = true;
+		o.rmempty = false;
 		o.depends("ipv6_enabled", "1");
 
 		o = s.taboption(
