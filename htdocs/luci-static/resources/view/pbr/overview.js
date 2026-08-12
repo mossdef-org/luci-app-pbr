@@ -113,6 +113,10 @@ return view.extend({
 			text
 		);
 		o.value("none", _("Disabled"));
+		// Documented fallback for devices where no resolver set support is
+		// detected; combined with rmempty = false below, the value stored in
+		// /etc/config/pbr is preserved either way.
+		o.default = "none";
 		if (reply.platform.adguardhome_ipset_support) {
 			o.value("adguardhome.ipset", _("AdGuardHome ipset"));
 			o.default = "adguardhome.ipset";
@@ -125,6 +129,16 @@ return view.extend({
 			o.value("dnsmasq.nftset", _("Dnsmasq nft set"));
 			o.default = "dnsmasq.nftset";
 		}
+		// luci-base commit 974b5864e05ef30f38149389f15583c08bdd4eda
+		// ("luci-base: form: do not write values equal to the default")
+		// removes an option whose value equals its default whenever rmempty or
+		// optional is set:
+		// https://github.com/openwrt/luci/commit/974b5864e05ef30f38149389f15583c08bdd4eda
+		// pbr ships resolver_set in /etc/config/pbr, so without rmempty = false
+		// the stored value would be deleted on the first Save and resolver set
+		// handling silently disabled. forcewrite is not an alternative here:
+		// that branch became unreachable in exactly this case.
+		o.rmempty = false;
 
 		o = s.taboption(
 			"tab_basic",
