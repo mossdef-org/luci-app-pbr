@@ -10,6 +10,12 @@ var pkg = {
 	get Name() {
 		return "pbr";
 	},
+	// Must equal pbr's pkg.compat and rpcdCompat in luci.pbr. Any change to
+	// pbr's error/warning catalog bumps all five in lockstep: pbr pkg.uc,
+	// pbr files/etc/init.d/pbr, pbr tests/04_policies/01_start_dynamic_routing,
+	// this getter, and rpcdCompat. A mismatch trips isVersionMismatch() below
+	// and tells the user their WebUI is outdated, so the two packages have to
+	// be released together.
 	get LuciCompat() {
 		return 36;
 	},
