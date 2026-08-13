@@ -11,7 +11,7 @@ var pkg = {
 		return "pbr";
 	},
 	get LuciCompat() {
-		return 35;
+		return 36;
 	},
 	get ReadmeCompat() {
 		return "1.2.3";
@@ -180,7 +180,6 @@ var status = baseclass.extend({
 			reply = {
 				enabled: reply.enabled || false,
 				running: reply.running || false,
-				running_iptables: reply.running_iptables || false,
 				running_nft: reply.running_nft || false,
 				running_nft_file: reply.running_nft_file || false,
 				version: reply.version || null,
@@ -227,9 +226,7 @@ var status = baseclass.extend({
 				text = _("Version %s").format(reply.version) + " - ";
 				if (reply.running) {
 					text += _("Running");
-					if (reply.running_iptables) {
-						text += " (" + _("iptables mode") + ").";
-					} else if (reply.running_nft_file) {
+					if (reply.running_nft_file) {
 						text += " (" + _("fw4 nft file mode") + ").";
 					} else if (reply.running_nft) {
 						text += " (" + _("nft mode") + ").";
@@ -302,14 +299,14 @@ var status = baseclass.extend({
 						"Installed AdGuardHome (%s) doesn't support 'ipset_file' option.",
 					),
 					warningPolicyProcessCMD: _("%s"),
-					warningTorUnsetParams: _(
-						"Please unset 'src_addr', 'src_port' and 'dest_port' for policy '%s'",
+					warningTorUnsetSrcPort: _(
+						"Please unset 'src_port' for policy '%s': it produces an invalid rule",
+					),
+					warningTorUnsetDestPort: _(
+						"Please unset 'dest_port' for policy '%s': it is ignored",
 					),
 					warningTorUnsetProto: _(
 						"Please unset 'proto' or set 'proto' to 'all' for policy '%s'",
-					),
-					warningTorUnsetChainIpt: _(
-						"Please unset 'chain' or set 'chain' to 'PREROUTING' for policy '%s'",
 					),
 					warningTorUnsetChainNft: _(
 						"Please unset 'chain' or set 'chain' to 'prerouting' for policy '%s'",
@@ -398,10 +395,6 @@ var status = baseclass.extend({
 					errorConfigValidation: _("Config (%s) validation failure").format(
 						"/etc/config/" + pkg.Name,
 					),
-					errorNoIptables: _("%s binary cannot be found").format("iptables"),
-					errorNoIpset: _(
-						"Resolver set support (%s) requires ipset, but ipset binary cannot be found",
-					).format(pkg.escapeInfo(L.uci.get(pkg.Name, "config", "resolver_set"))),
 					errorNoNft: _(
 						"Resolver set support (%s) requires nftables, but nft binary cannot be found",
 					).format(pkg.escapeInfo(L.uci.get(pkg.Name, "config", "resolver_set"))),
@@ -422,9 +415,6 @@ var status = baseclass.extend({
 					).format(
 						'<a href="' + pkg.URL + '#uplink_interface" target="_blank">',
 						"</a>!<br />",
-					),
-					errorIpsetNameTooLong: _(
-						"The ipset name '%s' is longer than allowed 31 characters",
 					),
 					errorNftsetNameTooLong: _(
 						"The nft set name '%s' is longer than allowed 255 characters",
