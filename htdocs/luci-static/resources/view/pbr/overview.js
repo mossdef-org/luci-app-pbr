@@ -150,6 +150,39 @@ return view.extend({
 		o.value("1", _("Enabled"));
 
 		o = s.taboption(
+			"tab_basic",
+			form.Flag,
+			"symmetric_return",
+			_("Symmetric return routing"),
+			_(
+				"Remember the interface used by a new incoming connection and route its replies through the same interface. " +
+					"This applies to forwarded connections and services running on the router."
+			)
+		);
+		o.default = "0";
+		o.rmempty = false;
+
+		o = s.taboption(
+			"tab_basic",
+			form.MultiValue,
+			"symmetric_return_interface",
+			_("Symmetric return interfaces"),
+			_(
+				"Select the external or tunnel interfaces whose incoming connections must return through the same path."
+			)
+		);
+		o.depends("symmetric_return", "1");
+		reply.interfaces.forEach((element) => {
+			if (
+				element.toLowerCase() !== "ignore" &&
+				element.toLowerCase() !== "tor"
+			) {
+				o.value(element);
+			}
+		});
+		o.rmempty = true;
+
+		o = s.taboption(
 			"tab_advanced",
 			form.DynamicList,
 			"supported_interface",
