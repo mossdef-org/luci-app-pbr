@@ -544,23 +544,64 @@ return view.extend({
 			// Saving settings fires pbr's procd config.change trigger, which
 			// reloads the service asynchronously. LuCI reloads the page once the
 			// apply completes, so getInitStatus() often lands mid-reload and
-			// reports the service as stopped -- and nothing ever re-checked it,
-			// leaving a stale "Stopped" until the user refreshed by hand.
+			// reports state that is already out of date -- and nothing ever
+			// re-checks it. Nothing in this app registers a poll, so whatever is
+			// on screen after that first fetch stays there until the user
+			// refreshes by hand.
 			//
-			// Re-check only while the status looks like that transient state
-			// (enabled but not running), and stop as soon as it settles. A
-			// normally-running service therefore costs no extra RPC calls:
-			// getInitStatus() is expensive on the router, since every call
-			// re-runs full platform detection and dumps the nft table.
+			// Two ways that shows up. A service caught mid-restart reads as
+			// stopped and stays "Stopped". And -- since r97 reports a policy's
+			// 'proto' and rejects an unusable chain -- a warning the user has
+			// just corrected stays on screen, because the reload never makes the
+			// service look stopped, so the old check (enabled && !running) never
+			// armed for it.
+			//
+			// So arm whenever there is something that could still change: the
+			// service is not running yet, or the status carries messages that a
+			// reload may be about to revise.
 			//
 			// This deliberately uses setTimeout rather than LuCI's poll module
 			// (same approach as pollServiceStatus() in pbr/status.js): a
 			// registered poll drives LuCI's global auto-refresh indicator, which
 			// would sit at "Paused" once we unregistered, as if the page had
 			// stalled.
-			if (statusData.enabled && !statusData.running) {
+			var hasMessages = function (reply) {
+				return (
+					((reply.errors || []).length > 0) ||
+					((reply.warnings || []).length > 0)
+				);
+			};
+
+			// Everything the status box shows that a config change can alter.
+			// Comparing it across ticks lets us stop as soon as the service has
+			// settled, instead of guessing how long a reload takes -- a large
+			// config can take the better part of a minute.
+			var stateSignature = function (reply) {
+				// Sorted, so a reload that reports the same messages in a
+				// different order counts as settled instead of flip-flopping
+				// until the attempt limit. The order pbr emits them in follows
+				// its policy processing and is not something the panel depends
+				// on.
+				var codes = function (list) {
+					return (list || [])
+						.map(function (m) {
+							return m.code + "\u0000" + m.info;
+						})
+						.sort();
+				};
+				return JSON.stringify([
+					!!reply.running,
+					!!reply.enabled,
+					codes(reply.errors),
+					codes(reply.warnings),
+				]);
+			};
+
+			if (statusData.enabled && (!statusData.running || hasMessages(statusData))) {
 				var attempts = 0;
 				var maxAttempts = 22; // give up after ~90s
+				var initialSig = stateSignature(statusData);
+				var lastSig = initialSig;
 
 				// Check quickly at first, since a reload normally completes
 				// within a few seconds, then ease off so that a slow restart
@@ -577,6 +618,7 @@ return view.extend({
 				// user on every tick.
 				var refreshStatus = function () {
 					return status.render().then(function (freshNode) {
+						if (statusNode.isConnected === false) return;
 						dom.content(
 							statusNode,
 							Array.prototype.slice.call(freshNode.childNodes)
@@ -585,12 +627,31 @@ return view.extend({
 				};
 
 				var checkStatus = function () {
+					// Stop if the user has navigated away: LuCI replaces the
+					// view but pending timers keep running, and getInitStatus()
+					// is expensive enough that polling a page nobody is looking
+					// at is worth avoiding. Written as `=== false` so a browser
+					// without isConnected simply behaves as before.
+					if (statusNode.isConnected === false) return;
+
 					attempts++;
 					L.resolveDefault(pbr.getInitStatus(pkg.Name), {})
 						.then(function (res) {
 							var reply = (res && res[pkg.Name]) || {};
-							if (reply.running || !reply.enabled || attempts >= maxAttempts)
-								return refreshStatus();
+							var sig = stateSignature(reply);
+
+							// Settled once two consecutive reads agree, or we
+							// have waited long enough.
+							if (sig === lastSig || attempts >= maxAttempts) {
+								// Only redraw if what is on screen is actually
+								// out of date. A service sitting on a permanent
+								// warning therefore costs one extra RPC per page
+								// load and no redraw at all.
+								if (sig !== initialSig) return refreshStatus();
+								return;
+							}
+
+							lastSig = sig;
 							setTimeout(checkStatus, delayFor(attempts));
 						})
 						.catch(function () {
