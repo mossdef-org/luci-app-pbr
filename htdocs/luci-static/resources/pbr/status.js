@@ -17,7 +17,7 @@ var pkg = {
 	// and tells the user their WebUI is outdated, so the two packages have to
 	// be released together.
 	get LuciCompat() {
-		return 36;
+		return 37;
 	},
 	get ReadmeCompat() {
 		return "1.2.3";
@@ -305,6 +305,12 @@ var status = baseclass.extend({
 						"Installed AdGuardHome (%s) doesn't support 'ipset_file' option.",
 					),
 					warningPolicyProcessCMD: _("%s"),
+					warningPolicyProtoNoPort: _(
+						"Policy %s: 'proto' is ignored without a port, so every protocol is routed; set the port range to '0-65535' to match all of it",
+					),
+					warningPolicyProtoPortless: _(
+						"Policy %s: this protocol cannot be matched by a policy and is ignored; to route ICMP use the 'Default ICMP Interface' setting instead",
+					),
 					warningTorUnsetSrcPort: _(
 						"Please unset 'src_port' for policy '%s': it produces an invalid rule",
 					),
@@ -458,6 +464,9 @@ var status = baseclass.extend({
 					),
 					errorPolicyProcessMismatchFamily: _(
 						"Mismatched IP family between in policy '%s'",
+					),
+					errorPolicyProtoPortNotSupported: _(
+						"Policy %s: this protocol cannot match a port; unset the port, otherwise nft rejects the whole ruleset",
 					),
 					errorPolicyProcessUnknownProtocol: _(
 						"Unknown protocol in policy '%s'",

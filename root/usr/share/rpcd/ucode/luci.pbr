@@ -20,7 +20,7 @@ const packageName = 'pbr'; // ucode-lsp disable
 // Must equal LuciCompat in pbr/status.js and pkg.compat in the pbr backend;
 // a mismatch trips isVersionMismatch() and warns the user to update. Bump all
 // five locations together whenever pbr's message catalog changes.
-const rpcdCompat = 36; // ucode-lsp disable
+const rpcdCompat = 37; // ucode-lsp disable
 
 // ── rpcd Method Handlers ────────────────────────────────────────────
 

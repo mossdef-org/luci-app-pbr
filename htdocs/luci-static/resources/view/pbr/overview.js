@@ -340,25 +340,53 @@ return view.extend({
 		o = s.option(form.ListValue, "proto", _("Protocol"));
 		o.value("", _("all"));
 		o.default = "";
-		var popularProtos = ["tcp", "udp", "tcp udp", "icmp"];
+		// 'proto' only ever reaches a rule as a prefix on sport/dport, so a
+		// protocol that cannot carry a port cannot work here: with a port it
+		// emits e.g. 'icmp dport { 53 }', which nft refuses -- rejecting the
+		// whole ruleset -- and without one it is dropped and the policy matches
+		// every protocol. reply.protocols is built from /etc/protocols, so most
+		// of what it lists is unusable; offer only what nft can actually match.
+		// To route ICMP use "Default ICMP Interface" on the Advanced tab.
+		var portCapable = ["tcp", "udp", "sctp", "dccp", "udplite"];
+		var usableProtos = reply.protocols.filter(function (p) {
+			return portCapable.indexOf(p) !== -1;
+		});
+		// "tcp udp" is a composite value, not a protocol: pbr splits proto on
+		// whitespace and emits one rule per token, and it is by far the most
+		// common pairing, so it stays as a single convenient choice.
+		var popularProtos = ["tcp", "udp", "tcp udp"];
+		// Every value actually offered, so the fallback below can tell whether a
+		// configured value is still in the list. Added in the same place as
+		// o.value() so the two cannot drift apart.
+		var offered = [""];
+		function offer(p, label) {
+			if (offered.indexOf(p) !== -1) return false;
+			label ? o.value(p, label) : o.value(p);
+			offered.push(p);
+			return true;
+		}
 		var hasPopular = false;
 		popularProtos.forEach(function (p) {
 			if (p === "tcp udp") {
-				if (reply.protocols.indexOf("tcp") !== -1 && reply.protocols.indexOf("udp") !== -1) {
-					o.value(p);
-					hasPopular = true;
+				if (usableProtos.indexOf("tcp") !== -1 && usableProtos.indexOf("udp") !== -1) {
+					if (offer(p)) hasPopular = true;
 				}
-			} else if (reply.protocols.indexOf(p) !== -1) {
-				o.value(p);
-				hasPopular = true;
+			} else if (usableProtos.indexOf(p) !== -1) {
+				if (offer(p)) hasPopular = true;
 			}
 		});
 		var hasOther = false;
-		reply.protocols.forEach(function (p) {
+		usableProtos.forEach(function (p) {
 			if (popularProtos.indexOf(p) === -1) {
-				o.value(p);
-				hasOther = true;
+				if (offer(p)) hasOther = true;
 			}
+		});
+		// Keep whatever an existing config already holds, even though it is no
+		// longer offered -- otherwise opening this page silently rewrites the
+		// policy to 'all' on the next save, changing what it matches.
+		L.uci.sections(pkg.Name, "policy", function (sec) {
+			var cur = sec.proto;
+			if (cur) offer(cur, cur + " " + _("(unsupported)"));
 		});
 		o.rmempty = true;
 		if (hasPopular && hasOther) {
