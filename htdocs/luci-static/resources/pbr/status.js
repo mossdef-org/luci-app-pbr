@@ -465,6 +465,9 @@ var status = baseclass.extend({
 					errorPolicyProcessMismatchFamily: _(
 						"Mismatched IP family between in policy '%s'",
 					),
+					errorPolicyUnknownChain: _(
+						"Policy %s: unknown chain; use 'prerouting', 'forward' or 'output'",
+					),
 					errorPolicyProtoPortNotSupported: _(
 						"Policy %s: this protocol cannot match a port; unset the port, otherwise nft rejects the whole ruleset",
 					),
