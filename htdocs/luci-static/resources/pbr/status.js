@@ -20,7 +20,7 @@ var pkg = {
 		return 37;
 	},
 	get ReadmeCompat() {
-		return "1.2.3";
+		return "1.2.4";
 	},
 	get URL() {
 		return (
