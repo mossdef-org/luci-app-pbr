@@ -608,7 +608,12 @@ return view.extend({
 				var attempts = 0;
 				var maxAttempts = 22; // give up after ~90s
 				var initialSig = stateSignature(statusData);
-				var lastSig = initialSig;
+				// Deliberately NOT seeded with initialSig. This loop only runs
+				// when the page already looks unsettled, so pairing the first
+				// poll with the page-load read ends it at attempts == 1 whenever
+				// a reload is still in flight -- the common case -- leaving the
+				// mid-restart status on screen. Two POLLED reads must agree.
+				var lastSig = null;
 
 				// Check quickly at first, since a reload normally completes
 				// within a few seconds, then ease off so that a slow restart
@@ -652,8 +657,8 @@ return view.extend({
 							if (sig === lastSig || attempts >= maxAttempts) {
 								// Only redraw if what is on screen is actually
 								// out of date. A service sitting on a permanent
-								// warning therefore costs one extra RPC per page
-								// load and no redraw at all.
+								// warning therefore costs two RPCs per page load
+								// and no redraw at all.
 								if (sig !== initialSig) return refreshStatus();
 								return;
 							}
