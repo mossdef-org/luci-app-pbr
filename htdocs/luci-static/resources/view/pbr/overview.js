@@ -25,7 +25,14 @@ return view.extend({
 		var reply = {
 			interfaces: statusData.interfaces || ["wan"],
 			interface_labels: statusData.interface_labels || {},
-			protocols: statusData.protocols || [],
+			// An empty list leaves the Protocol dropdown with nothing but 'all',
+			// since usableProtos filters it. tcp/udp are the only two certain to
+			// be in /etc/protocols, and they also yield the 'tcp udp' composite.
+			// Tested with .length, not ||, because an empty array is truthy and
+			// pbr returns one if /etc/protocols cannot be read.
+			protocols: statusData.protocols?.length
+				? statusData.protocols
+				: ["tcp", "udp"],
 			platform: statusData.platform || {
 				nft_installed: false,
 				adguardhome_installed: false,
