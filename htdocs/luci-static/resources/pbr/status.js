@@ -42,14 +42,18 @@ var pkg = {
 	isVersionMismatch: function (luci, pkg, rpcd) {
 		return luci !== pkg || pkg !== rpcd || luci !== rpcd;
 	},
-	// HTML-escape an untrusted scalar value with LuCI's %h format specifier so
-	// config-derived text reflected into status messages cannot inject markup
-	// when appended via innerHTML by E()/dom.create. Trusted array infos built
-	// in this file (e.g. anchor tags) are passed through unchanged.
+	// HTML-escape an untrusted value with LuCI's %h format specifier so text
+	// reflected into status messages cannot inject markup when appended via
+	// innerHTML by E()/dom.create. Arrays are escaped element-wise: this is
+	// applied to e.info straight off the rpcd reply, so an array-valued info
+	// would otherwise reach template.format() and innerHTML unescaped. The one
+	// array built in this file, warningInternalVersionMismatch's anchor tags,
+	// is pushed after that map and never passes through here.
 	escapeInfo: function (info) {
-		return Array.isArray(info)
-			? info
-			: info != null && info !== "" ? "%h".format(info) : info;
+		var esc = function (value) {
+			return value != null && value !== "" ? "%h".format(value) : value;
+		};
+		return Array.isArray(info) ? info.map(esc) : esc(info);
 	},
 	formatMessage: function (info, template) {
 		if (!template) return _("Unknown message") + "<br />";
