@@ -174,17 +174,6 @@ return view.extend({
 		o = s.taboption(
 			"tab_advanced",
 			form.ListValue,
-			"rule_create_option",
-			_("Rule Create option"),
-			_("Select Add for -A/add and Insert for -I/Insert.")
-		);
-		o.value("add", _("Add"));
-		o.value("insert", _("Insert"));
-		o.default = "add";
-
-		o = s.taboption(
-			"tab_advanced",
-			form.ListValue,
 			"icmp_interface",
 			_("Default ICMP Interface"),
 			_("Force the ICMP protocol interface.")
