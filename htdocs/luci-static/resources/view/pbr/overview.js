@@ -437,10 +437,43 @@ return view.extend({
 			};
 		}
 
+		// pbr takes any list of chains and gives each the same rules, but the
+		// only pairing that does anything is prerouting with output: forwarded
+		// traffic and the router's own. forward runs after the routing decision,
+		// on packets prerouting has already seen, so beside prerouting it only
+		// repeats a mark. Like "tcp udp" for 'proto', that pairing is offered as
+		// a single choice.
 		o = s.option(form.ListValue, "chain", _("Chain"));
 		o.value("", "prerouting");
 		o.value("forward", "forward");
 		o.value("output", "output");
+		o.value("prerouting output", "prerouting output");
+		var offeredChains = ["", "forward", "output", "prerouting output"];
+		// The same chains in another order or case, or as a UCI list, read as
+		// the choice they amount to.
+		var normChain = function (v) {
+			var c = L.toArray(v).map(function (x) {
+				return x.toLowerCase();
+			}).filter(function (x, i, a) {
+				return a.indexOf(x) === i;
+			});
+			if (c.length === 1 && c[0] === "prerouting") return "";
+			if (c.length === 2 && c.indexOf("prerouting") !== -1 && c.indexOf("output") !== -1)
+				return "prerouting output";
+			return c.join(" ");
+		};
+		// As for 'proto': keep a value already in the config that is not
+		// offered, rather than dropping it from the policy on the next save.
+		L.uci.sections(pkg.Name, "policy", function (sec) {
+			var cur = normChain(sec.chain);
+			if (offeredChains.indexOf(cur) === -1) {
+				offeredChains.push(cur);
+				o.value(cur, cur + " " + _("(unsupported)"));
+			}
+		});
+		o.cfgvalue = function (section_id) {
+			return normChain(this.super("cfgvalue", [section_id]));
+		};
 		o.default = "";
 		o.rmempty = true;
 

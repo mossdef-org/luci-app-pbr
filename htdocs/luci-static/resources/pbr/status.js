@@ -17,7 +17,7 @@ var pkg = {
 	// and tells the user their WebUI is outdated, so the two packages have to
 	// be released together.
 	get LuciCompat() {
-		return 37;
+		return 38;
 	},
 	get ReadmeCompat() {
 		return "1.2.4";
@@ -468,6 +468,9 @@ var status = baseclass.extend({
 					),
 					errorPolicyProcessMismatchFamily: _(
 						"Mismatched IP family between in policy '%s'",
+					),
+					errorPolicyUnknownChain: _(
+						"Policy %s: unknown chain; use 'prerouting', 'forward' or 'output'",
 					),
 					errorPolicyProtoPortNotSupported: _(
 						"Policy %s: this protocol cannot match a port; unset the port, otherwise nft rejects the whole ruleset",
