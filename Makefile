@@ -12,7 +12,7 @@ PKG_RELEASE:=0
 LUCI_TITLE:=Policy Based Routing Service Web UI
 LUCI_URL:=https://docs.mossdef.org/pbr/1.2.4/
 LUCI_DESCRIPTION:=Provides Web UI for Policy Based Routing Service.
-LUCI_DEPENDS:=+luci-base +jsonfilter +rpcd-mod-ucode +pbr
+LUCI_DEPENDS:=+luci-base +rpcd-mod-ucode +pbr
 
 define Package/$(PKG_NAME)/config
 # shown in make menuconfig <Help>

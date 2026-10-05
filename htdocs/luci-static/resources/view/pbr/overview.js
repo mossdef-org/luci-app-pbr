@@ -25,7 +25,14 @@ return view.extend({
 		var reply = {
 			interfaces: statusData.interfaces || ["wan"],
 			interface_labels: statusData.interface_labels || {},
-			protocols: statusData.protocols || [],
+			// An empty list leaves the Protocol dropdown with nothing but 'all',
+			// since usableProtos filters it. tcp/udp are the only two certain to
+			// be in /etc/protocols, and they also yield the 'tcp udp' composite.
+			// Tested with .length, not ||, because an empty array is truthy and
+			// pbr returns one if /etc/protocols cannot be read.
+			protocols: statusData.protocols?.length
+				? statusData.protocols
+				: ["tcp", "udp"],
 			platform: statusData.platform || {
 				nft_installed: false,
 				adguardhome_installed: false,
@@ -601,7 +608,12 @@ return view.extend({
 				var attempts = 0;
 				var maxAttempts = 22; // give up after ~90s
 				var initialSig = stateSignature(statusData);
-				var lastSig = initialSig;
+				// Deliberately NOT seeded with initialSig. This loop only runs
+				// when the page already looks unsettled, so pairing the first
+				// poll with the page-load read ends it at attempts == 1 whenever
+				// a reload is still in flight -- the common case -- leaving the
+				// mid-restart status on screen. Two POLLED reads must agree.
+				var lastSig = null;
 
 				// Check quickly at first, since a reload normally completes
 				// within a few seconds, then ease off so that a slow restart
@@ -645,8 +657,8 @@ return view.extend({
 							if (sig === lastSig || attempts >= maxAttempts) {
 								// Only redraw if what is on screen is actually
 								// out of date. A service sitting on a permanent
-								// warning therefore costs one extra RPC per page
-								// load and no redraw at all.
+								// warning therefore costs two RPCs per page load
+								// and no redraw at all.
 								if (sig !== initialSig) return refreshStatus();
 								return;
 							}
