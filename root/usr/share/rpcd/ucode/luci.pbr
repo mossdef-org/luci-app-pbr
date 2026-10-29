@@ -13,7 +13,7 @@ ubus call luci.pbr setInitAction '{"name":"pbr","action":"start"}'
 */
 
 import create_pbr from '/lib/pbr/pbr.uc';
-import { access } from 'fs';
+import { access, popen } from 'fs';
 import { cursor } from 'uci';
 
 const packageName = 'pbr'; // ucode-lsp disable
@@ -58,6 +58,39 @@ const methods = {
 			let name = req.args?.name || packageName;
 			let pbr = create_pbr();
 			return pbr.get_platform_support(name);
+		}
+	},
+	getPolicyHits: {
+		args: { name: 'name' },
+		call: function(req) {
+			let name = req.args?.name || packageName;
+			if (name != packageName) return { counters: false, hits: {} };
+			// Per-policy packet counters, aggregated by rule comment (the
+			// policy name, written when nft_rule_counter is enabled).
+			let hits = {};
+			let counters = false;
+			for (let chain in ['pbr_prerouting', 'pbr_forward', 'pbr_output', 'pbr_dstnat']) {
+				let p = popen('nft -j list chain inet fw4 ' + chain + ' 2>/dev/null');
+				if (!p) continue;
+				let out = p.read('all');
+				p.close();
+				if (!out) continue;
+				let data;
+				try { data = json(out); } catch (e) { continue; }
+				for (let item in data?.nftables) {
+					let rule = item?.rule;
+					if (!rule) continue;
+					let packets;
+					for (let ex in rule.expr)
+						if (ex?.counter)
+							packets = ex.counter.packets;
+					if (packets == null) continue;
+					counters = true;
+					if (rule.comment == null) continue;
+					hits[rule.comment] = (hits[rule.comment] ?? 0) + packets;
+				}
+			}
+			return { counters: counters, hits: hits };
 		}
 	},
 	setInitAction: {

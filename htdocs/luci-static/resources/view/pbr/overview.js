@@ -11,6 +11,530 @@
 
 var pkg = pbr.pkg;
 
+// ─── pbr-ui overlay: exec order, groups, filters, clone ──────────────
+// Policies are never reordered: UCI order is execution order, and the
+// always-visible Exec # makes that order explicit. Filtering dims
+// non-matching rows instead of hiding or moving them. All text lands in
+// the DOM via E()/textContent, never via innerHTML.
+
+var GROUP_PALETTE = [
+	"#2d5986", "#1a6644", "#7a3a1a", "#5a2d86", "#1a5a6a", "#863d2d",
+	"#4a5d23", "#7a1a44",
+];
+
+// Stable color per label (hash-based, order-independent).
+function groupColor(label) {
+	var h = 0;
+	for (var i = 0; i < label.length; i++)
+		h = (h * 31 + label.charCodeAt(i)) >>> 0;
+	return GROUP_PALETTE[h % GROUP_PALETTE.length];
+}
+
+var PBR_UI_CSS = [
+	"#pbr-filter-bar { display:flex; flex-wrap:wrap; gap:6px; align-items:center;",
+	"  padding:8px 0; }",
+	"#pbr-filter-bar .pbr-bar-label { font-size:.85em; opacity:.7; margin-right:2px; }",
+	".pbr-chip { cursor:pointer; user-select:none; border-radius:12px; padding:2px 11px;",
+	"  font-size:.85em; line-height:1.6; border:1px solid rgba(128,128,128,.45);",
+	"  background:rgba(128,128,128,.12); white-space:nowrap; }",
+	".pbr-chip:hover { border-color:rgba(128,128,128,.8); }",
+	".pbr-chip.active { color:#fff; border-color:transparent; }",
+	".pbr-chip .pbr-chip-n { opacity:.65; font-size:.9em; margin-left:4px; }",
+	".pbr-dim { opacity:.3; }",
+	".pbr-exec-num { display:inline-block; min-width:1.6em; margin-right:6px;",
+	"  font-size:.78em; opacity:.55; text-align:right; font-variant-numeric:tabular-nums; }",
+	".pbr-group-badge { display:inline-block; color:#fff; border-radius:3px;",
+	"  padding:0 6px; margin-right:6px; font-size:.75em; line-height:1.7;",
+	"  vertical-align:middle; letter-spacing:.04em; }",
+	".pbr-clone-btn { margin:0 2px; }",
+	"#pbr-grp-actions { display:flex; gap:5px; margin-left:8px; }",
+	".pbr-hits-badge { display:inline-block; margin-left:6px; padding:0 7px;",
+	"  border-radius:8px; font-size:.75em; line-height:1.7;",
+	"  background:rgba(128,128,128,.18); opacity:.85;",
+	"  font-variant-numeric:tabular-nums; vertical-align:middle; }",
+	".pbr-hits-badge.pbr-hits-active { background:rgba(26,102,68,.85); color:#fff; }",
+	"tr.pbr-grp-hdr td { cursor:pointer; user-select:none; padding:3px 10px !important;",
+	"  color:#fff; font-weight:600; font-size:.8em; letter-spacing:.06em; line-height:1.9; }",
+	"tr.pbr-grp-hdr td:hover { filter:brightness(1.12); }",
+	".pbr-grp-hits { display:inline-block; margin-left:8px; padding:0 7px;",
+	"  border-radius:8px; font-size:.85em; font-weight:400; line-height:1.6;",
+	"  background:rgba(255,255,255,.22); color:#fff;",
+	"  font-variant-numeric:tabular-nums; }",
+	".pbr-grp-hits.pbr-hits-active { background:rgba(255,255,255,.38); font-weight:600; }",
+	".pbr-toggle { display:inline-block; width:1.1em; }",
+	".pbr-count { opacity:.75; font-weight:400; margin-left:.4em; }",
+	".pbr-hdr-right { float:right; display:flex; gap:4px; }",
+	".pbr-hdr-btn { cursor:pointer; background:rgba(255,255,255,.2);",
+	"  border:1px solid rgba(255,255,255,.3); color:#fff; padding:0 8px;",
+	"  border-radius:3px; font-size:.95em; line-height:1.6; white-space:nowrap; }",
+	".pbr-hdr-btn:hover { background:rgba(255,255,255,.38); }",
+].join("\n");
+
+function ensureCSS() {
+	if (document.getElementById("pbr-ui-css")) return;
+	var st = document.createElement("style");
+	st.id = "pbr-ui-css";
+	st.textContent = PBR_UI_CSS;
+	document.head.appendChild(st);
+}
+
+// Transient view state; survives map re-renders, resets on page load.
+var uiFilter = { group: null, iface: null };
+
+function renumberRows(sectNode) {
+	Array.from(sectNode.querySelectorAll("tr[data-sid]")).forEach(
+		function (row, i) {
+			var n = row.querySelector(".pbr-exec-num");
+			if (n) n.textContent = String(i + 1);
+		}
+	);
+}
+
+function applyFilter(rows) {
+	rows.forEach(function (row) {
+		var dim =
+			(uiFilter.group && row.dataset.pbrGroup !== uiFilter.group) ||
+			(uiFilter.iface && row.dataset.pbrIface !== uiFilter.iface);
+		row.classList.toggle("pbr-dim", !!dim);
+	});
+}
+
+function buildFilterBar(sectNode, m, sPolicy, groups, ifaces) {
+	var old = sectNode.querySelector("#pbr-filter-bar");
+	if (old) old.remove();
+
+	var rows = Array.from(sectNode.querySelectorAll("tr[data-sid]"));
+	var bar = E("div", { "id": "pbr-filter-bar" });
+
+	function chip(label, count, color, isActive, onClick) {
+		return E("span", {
+			"class": "pbr-chip" + (isActive ? " active" : ""),
+			"style": isActive ? "background:" + color : null,
+			"click": onClick,
+		}, [label, E("span", { "class": "pbr-chip-n" }, String(count))]);
+	}
+
+	var ifaceNames = Object.keys(ifaces).sort();
+	if (ifaceNames.length) {
+		bar.appendChild(E("span", { "class": "pbr-bar-label" }, _("Interface") + ":"));
+		ifaceNames.forEach(function (ifc) {
+			bar.appendChild(chip(ifc, ifaces[ifc], "#555d68",
+				uiFilter.iface === ifc, function () {
+					uiFilter.iface = uiFilter.iface === ifc ? null : ifc;
+					buildFilterBar(sectNode, m, sPolicy, groups, ifaces);
+					applyFilter(rows);
+				}));
+		});
+	}
+
+	var groupNames = Object.keys(groups).sort();
+	if (groupNames.length)
+		bar.appendChild(E("span", { "class": "pbr-bar-label" }, _("Group") + ":"));
+	groupNames.forEach(function (g) {
+		bar.appendChild(chip(g, groups[g].sids.length, groupColor(g),
+			uiFilter.group === g, function () {
+				uiFilter.group = uiFilter.group === g ? null : g;
+				buildFilterBar(sectNode, m, sPolicy, groups, ifaces);
+				applyFilter(rows);
+			}));
+	});
+
+	if (uiFilter.group && groups[uiFilter.group]) {
+		var g = uiFilter.group;
+		var sids = groups[g].sids;
+		var act = E("div", { "id": "pbr-grp-actions" });
+
+		act.appendChild(E("button", {
+			"class": "btn cbi-button cbi-button-add",
+			"title": _("Add a policy to this group"),
+			"click": function (ev) {
+				ev.preventDefault();
+				var nsid = m.data.add(pkg.Name, "policy");
+				m.data.set(pkg.Name, nsid, "group", g);
+				m.data.set(pkg.Name, nsid, "enabled", "1");
+				sPolicy.addedSection = nsid;
+				sPolicy.renderMoreOptionsModal(nsid);
+			},
+		}, "+ " + _("Rule")));
+
+		act.appendChild(E("button", {
+			"class": "btn cbi-button cbi-button-neutral",
+			"title": _("Remove the group label, keep the policies"),
+			"click": function (ev) {
+				ev.preventDefault();
+				if (!window.confirm(_("Remove group \"%s\" from %d policies?")
+						.format(g, sids.length))) return;
+				sids.forEach(function (sid) {
+					m.data.unset(pkg.Name, sid, "group");
+				});
+				uiFilter.group = null;
+				m.save(null, true);
+			},
+		}, "⟲ " + _("Ungroup")));
+
+		act.appendChild(E("button", {
+			"class": "btn cbi-button cbi-button-negative",
+			"title": _("Delete the group and all its policies"),
+			"click": function (ev) {
+				ev.preventDefault();
+				if (!window.confirm(
+					_("Delete group \"%s\" and ALL its %d policies? This cannot be undone.")
+						.format(g, sids.length))) return;
+				sids.forEach(function (sid) {
+					m.data.remove(pkg.Name, sid);
+				});
+				uiFilter.group = null;
+				m.save(null, true);
+			},
+		}, "✕ " + _("Delete all")));
+
+		bar.appendChild(act);
+	}
+
+	if (uiFilter.group || uiFilter.iface) {
+		bar.appendChild(E("span", {
+			"class": "pbr-chip",
+			"click": function () {
+				uiFilter.group = uiFilter.iface = null;
+				buildFilterBar(sectNode, m, sPolicy, groups, ifaces);
+				applyFilter(rows);
+			},
+		}, "✕ " + _("Reset filters")));
+	}
+
+	var descr = sectNode.querySelector(".cbi-section-descr");
+	if (descr) descr.insertAdjacentElement("afterend", bar);
+	else sectNode.insertBefore(bar, sectNode.firstChild);
+}
+
+// ── Per-policy live hit badges (needs pbr nft_rule_counter='1') ──────
+
+var callPolicyHits = rpc.declare({
+	object: "luci.pbr",
+	method: "getPolicyHits",
+});
+
+function decorateHits(sectNode) {
+	callPolicyHits().then(function (res) {
+		var countersOn = !!(res && res.counters);
+		var hits = (res && res.hits) || {};
+		Array.from(sectNode.querySelectorAll("tr[data-sid]")).forEach(
+			function (row) {
+				var sid = row.getAttribute("data-sid");
+				var sec = L.uci.get(pkg.Name, sid) || {};
+				var nameCell = row.querySelector('[data-name="name"]');
+				if (!nameCell) return;
+				var badge = nameCell.querySelector(".pbr-hits-badge");
+				if (!countersOn || !sec.name || !(sec.name in hits)) {
+					if (badge) badge.remove();
+					return;
+				}
+				var val = hits[sec.name];
+				if (!badge) {
+					badge = E("span", {
+						"class": "pbr-hits-badge",
+						"title": _("Packets matched (live nft counters)"),
+					});
+					nameCell.appendChild(badge);
+				}
+				badge.textContent = String(val);
+				badge.classList.toggle("pbr-hits-active", val > 0);
+			}
+		);
+		// group headers: sum of hits over the policies of each header's block
+		Array.from(sectNode.querySelectorAll("tr.pbr-grp-hdr")).forEach(
+			function (hdr) {
+				var badge = hdr.querySelector(".pbr-grp-hits");
+				if (!countersOn) {
+					if (badge) badge.remove();
+					return;
+				}
+				var sum = 0;
+				var any = false;
+				var n = hdr.nextElementSibling;
+				while (n && n.hasAttribute("data-sid") &&
+					n.dataset.pbrGroup === hdr.dataset.pbrGroup) {
+					var sec = L.uci.get(pkg.Name,
+						n.getAttribute("data-sid")) || {};
+					if (sec.name && (sec.name in hits)) {
+						sum += hits[sec.name];
+						any = true;
+					}
+					n = n.nextElementSibling;
+				}
+				if (!any) {
+					if (badge) badge.remove();
+					return;
+				}
+				if (!badge) {
+					badge = E("span", {
+						"class": "pbr-grp-hits",
+						"title": _("Total packets matched by this block"),
+					});
+					var cnt = hdr.querySelector(".pbr-count");
+					if (cnt) cnt.insertAdjacentElement("afterend", badge);
+					else hdr.querySelector("td").appendChild(badge);
+				}
+				badge.textContent = sum + " " + _("hits");
+				badge.classList.toggle("pbr-hits-active", sum > 0);
+			});
+
+		// refresh while this render is still on screen
+		if (sectNode.isConnected !== false)
+			window.setTimeout(function () { decorateHits(sectNode); }, 10000);
+	}).catch(function () { /* module not installed — no badges */ });
+}
+
+// ── Group header rows: collapse/expand, move, clone ──────────────────
+// Headers are built per CONTIGUOUS RUN of the same group label in real
+// UCI order, so visual order always equals execution order. Collapsing
+// only hides rows; moving/cloning are explicit bulk reorders staged via
+// uci and applied with the usual Save & Apply (pbr restart).
+
+var LS_COLLAPSED = "pbr-ui-collapsed";
+
+function loadCollapsed() {
+	try {
+		return new Set(JSON.parse(localStorage.getItem(LS_COLLAPSED) || "[]"));
+	} catch (e) { return new Set(); }
+}
+
+function saveCollapsed(set) {
+	try {
+		localStorage.setItem(LS_COLLAPSED, JSON.stringify(Array.from(set)));
+	} catch (e) { /* ignore */ }
+}
+
+function getRuns(rows) {
+	var runs = [];
+	var cur = null;
+	rows.forEach(function (row) {
+		var g = row.dataset.pbrGroup || "";
+		if (!cur || cur.label !== g) {
+			cur = { label: g, rows: [], sids: [] };
+			runs.push(cur);
+		}
+		cur.rows.push(row);
+		cur.sids.push(row.getAttribute("data-sid"));
+	});
+	return runs;
+}
+
+// Bulk structural ops go through the uci layer + a full page reload:
+// Map.save() on current LuCI silently drops 'reorder' changes, and a
+// structural change is cleaner re-rendered from scratch anyway. The
+// staged changes then await the regular Save & Apply (pbr restart).
+
+// Place run's sections, keeping their internal order, before targetSid.
+function moveRunBefore(run, targetSid) {
+	L.uci.move(pkg.Name, run.sids[0], targetSid, false);
+	for (var k = 1; k < run.sids.length; k++)
+		L.uci.move(pkg.Name, run.sids[k], run.sids[k - 1], true);
+	return L.uci.save().then(function () { window.location.reload(); });
+}
+
+// Duplicate a whole run right after itself under a fresh "<label>-copy" name.
+function cloneRun(run, allLabels) {
+	var base = run.label + "-copy";
+	var lbl = base;
+	var n = 2;
+	while (allLabels.indexOf(lbl) !== -1) lbl = base + n++;
+	var anchor = run.sids[run.sids.length - 1];
+	run.sids.forEach(function (sid) {
+		var src = L.uci.get(pkg.Name, sid) || {};
+		var nsid = L.uci.add(pkg.Name, "policy");
+		Object.keys(src).forEach(function (k) {
+			if (k.charAt(0) !== ".")
+				L.uci.set(pkg.Name, nsid, k, src[k]);
+		});
+		L.uci.set(pkg.Name, nsid, "group", lbl);
+		L.uci.move(pkg.Name, nsid, anchor, true);
+		anchor = nsid;
+	});
+	return L.uci.save().then(function () { window.location.reload(); });
+}
+
+function injectGroupHeaders(sectNode, m, rows) {
+	Array.from(sectNode.querySelectorAll("tr.pbr-grp-hdr")).forEach(
+		function (h) { h.remove(); });
+	if (!rows.length) return;
+
+	var collapsed = loadCollapsed();
+	var runs = getRuns(rows);
+	var allLabels = [];
+	runs.forEach(function (r) {
+		if (r.label && allLabels.indexOf(r.label) === -1)
+			allLabels.push(r.label);
+	});
+	var colCount = rows[0].children.length;
+
+	var applyCollapse = function () {
+		rows.forEach(function (row) {
+			var g = row.dataset.pbrGroup || "";
+			row.style.display = (g && collapsed.has(g)) ? "none" : "";
+		});
+		Array.from(sectNode.querySelectorAll("tr.pbr-grp-hdr")).forEach(
+			function (h) {
+				var t = h.querySelector(".pbr-toggle");
+				if (t) t.textContent =
+					collapsed.has(h.dataset.pbrGroup) ? "▶" : "▼";
+			});
+	};
+
+	runs.forEach(function (run, idx) {
+		if (!run.label) return;
+
+		var btn = function (txt, title, fn) {
+			return E("button", {
+				"class": "pbr-hdr-btn",
+				"title": title,
+				"click": function (ev) {
+					ev.preventDefault();
+					ev.stopPropagation();
+					fn();
+				},
+			}, txt);
+		};
+
+		var right = E("span", { "class": "pbr-hdr-right" }, [
+			idx > 0 ? btn("▲", _("Move group up"), function () {
+				moveRunBefore(run, runs[idx - 1].sids[0]);
+			}) : "",
+			idx < runs.length - 1 ? btn("▼", _("Move group down"), function () {
+				moveRunBefore(runs[idx + 1], run.sids[0]);
+			}) : "",
+			btn("⧉ " + _("Clone"), _("Duplicate this group with all its policies"),
+				function () { cloneRun(run, allLabels); }),
+		]);
+
+		var cell = E("td", {
+			"style": "background:" + groupColor(run.label),
+		}, [
+			E("span", { "class": "pbr-toggle" },
+				collapsed.has(run.label) ? "▶" : "▼"),
+			" ",
+			E("strong", {}, run.label),
+			E("span", { "class": "pbr-count" },
+				"(" + run.rows.length + ")"),
+			right,
+		]);
+		cell.colSpan = colCount;
+		cell.addEventListener("click", function () {
+			if (collapsed.has(run.label)) collapsed.delete(run.label);
+			else collapsed.add(run.label);
+			saveCollapsed(collapsed);
+			applyCollapse();
+		});
+
+		var hdr = E("tr", { "class": "pbr-grp-hdr" }, cell);
+		hdr.dataset.pbrGroup = run.label;
+		hdr.draggable = false;
+		run.rows[0].parentNode.insertBefore(hdr, run.rows[0]);
+	});
+
+	applyCollapse();
+}
+
+function setupPolicyUI(formNode, m, sPolicy) {
+	ensureCSS();
+
+	var sectNode = formNode.querySelector("#cbi-pbr-policy");
+	if (!sectNode) return;
+
+	// Re-apply the overlay after every map re-render (inline flag toggles,
+	// modal saves, our own group actions) without reloading the page.
+	if (!m._pbrUiWrapped) {
+		m._pbrUiWrapped = true;
+		var origSave = m.save.bind(m);
+		m.save = function () {
+			return origSave.apply(null, arguments).then(function (res) {
+				setupPolicyUI(formNode, m, sPolicy);
+				return res;
+			});
+		};
+	}
+
+	// Keep Exec # correct while rows are drag-sorted.
+	if (!sectNode.dataset.pbrDndHooked) {
+		sectNode.dataset.pbrDndHooked = "1";
+		["drop", "dragend"].forEach(function (evName) {
+			sectNode.addEventListener(evName, function () {
+				window.setTimeout(function () { renumberRows(sectNode); }, 50);
+			}, true);
+		});
+	}
+
+	var rows = Array.from(sectNode.querySelectorAll("tr[data-sid]"));
+	var groups = {};
+	var ifaces = {};
+
+	rows.forEach(function (row, idx) {
+		var sid = row.getAttribute("data-sid");
+		var sec = L.uci.get(pkg.Name, sid) || {};
+		var g = (sec.group || "").trim();
+		var ifc = (sec.interface || "").trim();
+
+		row.dataset.pbrGroup = g;
+		row.dataset.pbrIface = ifc;
+		if (g) (groups[g] = groups[g] || { sids: [] }).sids.push(sid);
+		if (ifc) ifaces[ifc] = (ifaces[ifc] || 0) + 1;
+
+		var firstCell = row.querySelector("td");
+		if (firstCell && !firstCell.querySelector(".pbr-exec-num"))
+			firstCell.insertBefore(
+				E("span", { "class": "pbr-exec-num" }, String(idx + 1)),
+				firstCell.firstChild
+			);
+
+		if (g) {
+			row.style.borderLeft = "3px solid " + groupColor(g);
+			var nameCell = row.querySelector('[data-name="name"]');
+			if (nameCell && !nameCell.querySelector(".pbr-group-badge"))
+				nameCell.insertBefore(
+					E("span", {
+						"class": "pbr-group-badge",
+						"style": "background:" + groupColor(g),
+					}, g),
+					nameCell.firstChild
+				);
+		} else {
+			row.style.borderLeft = "";
+		}
+
+		var tdLast = row.querySelector("td:last-child");
+		var actions = tdLast ? (tdLast.querySelector("div") || tdLast) : null;
+		if (actions && !tdLast.querySelector(".pbr-clone-btn")) {
+			actions.insertBefore(
+				E("button", {
+					"class": "btn cbi-button cbi-button-neutral pbr-clone-btn",
+					"title": _("Duplicate this policy"),
+					"click": function (ev) {
+						ev.preventDefault();
+						ev.stopPropagation();
+						var src = L.uci.get(pkg.Name, sid) || {};
+						var nsid = m.data.add(pkg.Name, "policy");
+						Object.keys(src).forEach(function (k) {
+							if (k.charAt(0) !== ".")
+								m.data.set(pkg.Name, nsid, k, src[k]);
+						});
+						m.data.set(pkg.Name, nsid, "name",
+							src.name ? src.name + "-copy" : "copy");
+						return m.save(null, true);
+					},
+				}, _("Clone")),
+				actions.querySelector(".cbi-button-edit")
+			);
+		}
+	});
+
+	injectGroupHeaders(sectNode, m, rows);
+	buildFilterBar(sectNode, m, sPolicy, groups, ifaces);
+	applyFilter(rows);
+	decorateHits(sectNode);
+}
+
+// ─── end pbr-ui overlay ──────────────────────────────────────────────
+
 return view.extend({
 	load: function () {
 		return Promise.all([
@@ -309,6 +833,16 @@ return view.extend({
 
 		o = s.option(form.Value, "name", _("Name"));
 
+		// pbr-ui: free-form label used only by the WebUI to badge and filter
+		// policies; the service ignores it and never reorders anything.
+		o = s.option(form.Value, "group", _("Group"));
+		o.rmempty = true;
+		o.optional = true;
+		o.modalonly = true;
+		L.uci.sections(pkg.Name, "policy", function (sec) {
+			if (sec.group) o.value(sec.group);
+		});
+
 		o = s.option(form.Value, "src_addr", _("Local addresses / devices"));
 		o.datatype =
 			"list(neg(or(cidr,host,ipmask,ipaddr,macaddr,network,string)))";
@@ -440,6 +974,8 @@ return view.extend({
 		o.datatype = "network";
 		o.rmempty = false;
 
+		var sPolicy = s; // pbr-ui: kept for the post-render overlay
+
 		s = m.section(
 			form.GridSection,
 			"dns_policy",
@@ -536,6 +1072,9 @@ return view.extend({
 
 		return Promise.all([status.render(), m.render()]).then(function (nodes) {
 			var statusNode = nodes[0];
+
+			// pbr-ui overlay: exec numbers, group badges, filter bar, clone
+			setupPolicyUI(nodes[1], m, sPolicy);
 
 			// Saving settings fires pbr's procd config.change trigger, which
 			// reloads the service asynchronously. LuCI reloads the page once the

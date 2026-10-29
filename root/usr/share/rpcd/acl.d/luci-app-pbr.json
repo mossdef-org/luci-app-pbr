@@ -4,7 +4,8 @@
 		"read": {
 			"ubus": {
 				"luci.pbr": [
-					"getInitStatus"
+					"getInitStatus",
+					"getPolicyHits"
 				]
 			},
 			"uci": [
